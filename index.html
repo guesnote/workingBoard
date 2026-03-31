@@ -872,7 +872,9 @@ let tags = (() => {
   ];
 })();
 
-function getTag(id) { return tags.find(t => t.id === id) || { id, name: id, color:'#8c877e' }; }
+function getTag(id) {
+  return tags.find(t => String(t.id) === String(id)) || { id, name: id, color:'#8c877e' };
+}
 
 // 動態 CSS：為每個標籤產生 .tag-xxx 樣式
 function applyTagStyles() {
