@@ -226,9 +226,17 @@
     </div>
     <div id="sidebar-tags"></div>
   </nav>
-  <div class="sidebar-footer">
-    <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs" style="background:linear-gradient(135deg,#4f7cff,#7c5cfc)">V</div>
-    <span style="font-size:13px;color:var(--text2)">Victor</span>
+  <div class="sidebar-footer" style="flex-direction:column;gap:8px;align-items:flex-start">
+    <div class="flex items-center gap-2 w-full">
+      <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs" style="background:linear-gradient(135deg,#4f7cff,#7c5cfc)">V</div>
+      <span style="font-size:13px;color:var(--text2)">Victor</span>
+    </div>
+    <div class="flex items-center gap-2 w-full">
+      <span id="sync-label" style="font-size:10.5px;color:var(--muted);flex:1">尚未同步</span>
+      <button onclick="syncFromSheets()" title="手動同步"
+        style="font-size:11px;padding:3px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer"
+        onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">⟳ 同步</button>
+    </div>
   </div>
 </aside>
 
@@ -1372,6 +1380,9 @@ function showToast(msg) {
 // ============================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbyJ5vNb9Ovq3LEVmEMzWddOT25rKKTq4UN2VU9C2dDTVsGQBGvWZc7IT7tBuyd-Cww/exec';
 
+const CACHE_KEY = 'workboard_cache';
+const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 分鐘
+
 async function apiGet(action) {
   const res = await fetch(`${API_URL}?action=${action}`);
   return res.json();
@@ -1426,64 +1437,94 @@ async function init() {
   renderAllPills();
   initCal();
   initGanttPage();
-  showLoading('連線至資料庫…');
 
-  try {
-    const data = await apiGet('loadAll');
-
-    // ── Tasks ──────────────────────────────────
-    (data.tasks || []).forEach(t => {
-      const id = Number(t.id);
-      if (id >= taskIdCounter) taskIdCounter = id + 1;
-      const startFmt = t.startDate ? String(t.startDate).slice(5).replace('-','/') : '';
-      const endFmt   = t.endDate   ? String(t.endDate).slice(5).replace('-','/')   : '';
-      taskStore[id] = {
-        id, name: t.name, tag: t.tag, status: t.status,
-        start: t.startDate || '', end: t.endDate || '',
-        startFmt, endFmt, memo: t.memo || ''
-      };
-    });
-
-    // ── Todos ──────────────────────────────────
-    (data.todos || []).forEach(t => {
-      const id = Number(t.id);
-      if (id >= todoIdCounter) todoIdCounter = id + 1;
-      todoStore.push({
-        id, text: t.text, tag: t.tag,
-        done: t.done === true || t.done === 'TRUE' || t.done === true
-      });
-    });
-
-    // ── Notes ──────────────────────────────────
-    (data.notes || []).forEach(n => {
-      const id = Number(n.id);
-      if (id >= noteIdCounter) noteIdCounter = id + 1;
-      noteStore.push({ id, text: n.content, tag: n.tag, date: n.date || '' });
-    });
-
-    // ── CalEvents ──────────────────────────────
-    (data.calEvents || []).forEach(ev => {
-      if (!ev.date) return;
-      const d = new Date(ev.date);
-      if (isNaN(d)) return;
-      const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
-      if (!calEvents[key]) calEvents[key] = [];
-      calEvents[key].push({ id: Number(ev.id), name: ev.name, tag: ev.tag });
-    });
-
-  } catch(err) {
-    showToast('⚠ 資料載入失敗，請確認網路連線');
-    console.error(err);
+  // 先從 localStorage 快速渲染
+  const cached = localStorage.getItem(CACHE_KEY);
+  if (cached) {
+    try {
+      loadFromData(JSON.parse(cached));
+      renderAll();
+      updateStats();
+      updateSyncLabel('從快取載入');
+    } catch(e) { localStorage.removeItem(CACHE_KEY); }
+  } else {
+    showLoading('連線至資料庫…');
   }
 
-  // 渲染所有區塊
+  // 背景從 Sheets 同步
+  await syncFromSheets();
+
+  // 定時自動同步
+  setInterval(syncFromSheets, SYNC_INTERVAL_MS);
+}
+
+function loadFromData(data) {
+  // 清空現有資料
+  Object.keys(taskStore).forEach(k => delete taskStore[k]);
+  todoStore.length = 0;
+  noteStore.length = 0;
+  Object.keys(calEvents).forEach(k => delete calEvents[k]);
+  taskIdCounter = 1; todoIdCounter = 1; noteIdCounter = 1;
+
+  (data.tasks || []).forEach(t => {
+    const id = Number(t.id);
+    if (id >= taskIdCounter) taskIdCounter = id + 1;
+    const startFmt = t.startDate ? String(t.startDate).slice(5).replace('-','/') : '';
+    const endFmt   = t.endDate   ? String(t.endDate).slice(5).replace('-','/')   : '';
+    taskStore[id] = { id, name: t.name, tag: t.tag, status: t.status,
+      start: t.startDate || '', end: t.endDate || '', startFmt, endFmt, memo: t.memo || '' };
+  });
+  (data.todos || []).forEach(t => {
+    const id = Number(t.id);
+    if (id >= todoIdCounter) todoIdCounter = id + 1;
+    todoStore.push({ id, text: t.text, tag: t.tag,
+      done: t.done === true || t.done === 'TRUE' });
+  });
+  (data.notes || []).forEach(n => {
+    const id = Number(n.id);
+    if (id >= noteIdCounter) noteIdCounter = id + 1;
+    noteStore.push({ id, text: n.content, tag: n.tag, date: n.date || '' });
+  });
+  (data.calEvents || []).forEach(ev => {
+    if (!ev.date) return;
+    const d = new Date(ev.date);
+    if (isNaN(d)) return;
+    const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    if (!calEvents[key]) calEvents[key] = [];
+    calEvents[key].push({ id: Number(ev.id), name: ev.name, tag: ev.tag });
+  });
+}
+
+function renderAll() {
   renderAllTaskCards();
   renderTodos();
   renderNotes();
   renderGantt();
   renderCalendar();
-  updateStats();
-  hideLoading();
+}
+
+async function syncFromSheets() {
+  updateSyncLabel('同步中…');
+  try {
+    const data = await apiGet('loadAll');
+    loadFromData(data);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    renderAll();
+    updateStats();
+    hideLoading();
+    const now = new Date();
+    updateSyncLabel(`上次同步：${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`);
+  } catch(err) {
+    console.error(err);
+    updateSyncLabel('同步失敗');
+    hideLoading();
+    if (!localStorage.getItem(CACHE_KEY)) showToast('⚠ 資料載入失敗，請確認網路連線');
+  }
+}
+
+function updateSyncLabel(text) {
+  const el = document.getElementById('sync-label');
+  if (el) el.textContent = text;
 }
 
 // ============================================================
