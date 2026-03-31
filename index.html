@@ -988,6 +988,7 @@ function updateTagColor(idx, color, swatch) {
   renderAllTaskCards();
   renderTodos();
   renderNotes();
+  apiPost('updateTag', { id: tags[idx].id, name: tags[idx].name, color: tags[idx].color }).catch(console.error);
   localStorage.setItem(TAGS_KEY, JSON.stringify(tags));
 }
 
@@ -1000,6 +1001,7 @@ function updateTagName(idx, name) {
   renderAllTaskCards();
   renderTodos();
   renderNotes();
+  apiPost('updateTag', { id: tags[idx].id, name: tags[idx].name, color: tags[idx].color }).catch(console.error);
   localStorage.setItem(TAGS_KEY, JSON.stringify(tags));
   showToast('✅ 標籤名稱已更新');
 }
@@ -1021,6 +1023,7 @@ function removeTag(idx) {
   renderTodos();
   renderNotes();
   renderGantt();
+  apiPost('deleteTag', { id: tid }).catch(console.error);
   localStorage.setItem(TAGS_KEY, JSON.stringify(tags));
   showToast('🗑 標籤已刪除');
 }
@@ -1036,6 +1039,9 @@ function addNewTag() {
   renderSidebarTags();
   renderAllPills();
   renderTagManagerList();
+  apiPost('addTag', { name, color }).then(res => {
+    if (res.id) tags[tags.length - 1].id = String(res.id);
+  }).catch(console.error);
   localStorage.setItem(TAGS_KEY, JSON.stringify(tags));
   showToast(`✅ 標籤「${name}」已新增`);
 }
@@ -1389,7 +1395,7 @@ function showToast(msg) {
 // ============================================================
 // API — Apps Script 串接
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbyJ5vNb9Ovq3LEVmEMzWddOT25rKKTq4UN2VU9C2dDTVsGQBGvWZc7IT7tBuyd-Cww/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzu1d-8VMNbtbKdI8SXZU_HzGxRPlAoIHSdFpRwlMdhQDVmhiQmg7g3FAST7K3A20xp/exec';
 
 const CACHE_KEY = 'workboard_cache';
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 分鐘
@@ -1443,9 +1449,6 @@ function hideLoading() {
 // INIT — 從 Sheets 載入
 // ============================================================
 async function init() {
-  applyTagStyles();
-  renderSidebarTags();
-  renderAllPills();
   initCal();
   initGanttPage();
 
@@ -1476,6 +1479,12 @@ function loadFromData(data) {
   noteStore.length = 0;
   Object.keys(calEvents).forEach(k => delete calEvents[k]);
   taskIdCounter = 1; todoIdCounter = 1; noteIdCounter = 1;
+  tags.length = 0;
+  
+  if (data.tags && data.tags.length) {
+    data.tags.forEach(t => tags.push({ id: String(t.id), name: t.name, color: t.color }));
+  }
+ 
 
   (data.tasks || []).forEach(t => {
     const id = Number(t.id);
@@ -1504,6 +1513,10 @@ function loadFromData(data) {
     if (!calEvents[key]) calEvents[key] = [];
     calEvents[key].push({ id: Number(ev.id), name: ev.name, tag: ev.tag });
   });
+
+  applyTagStyles();
+  renderSidebarTags();
+  renderAllPills();
 }
 
 function renderAll() {
