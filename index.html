@@ -1527,10 +1527,24 @@ function updateSyncLabel(text) {
   if (el) el.textContent = text;
 }
 
-// ============================================================
-// API-CONNECTED TASK OPERATIONS
-// ============================================================
-async function submitTask() {
+function saveCache() {
+  try {
+    const data = {
+      tasks: Object.values(taskStore).map(t => ({
+        id: t.id, name: t.name, tag: t.tag, status: t.status,
+        startDate: t.start, endDate: t.end, memo: t.memo
+      })),
+      todos: todoStore.map(t => ({ id: t.id, text: t.text, tag: t.tag, done: t.done })),
+      notes: noteStore.map(n => ({ id: n.id, content: n.text, tag: n.tag, date: n.date })),
+      calEvents: Object.entries(calEvents).flatMap(([key, evts]) =>
+        evts.map(ev => ({ id: ev.id, name: ev.name, tag: ev.tag, date: key.replace(/(\d+)-(\d+)-(\d+)/, (_, y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`) }))
+      )
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch(e) {}
+}
+
+function submitTask() {
   const name = document.getElementById('m-task-name').value.trim();
   if (!name) { showToast('⚠ 請輸入任務名稱'); return; }
   const tag      = pillState.task || tags[0].id;
@@ -1542,36 +1556,29 @@ async function submitTask() {
   const endFmt   = end   ? end.slice(5).replace('-','/')   : '';
 
   if (editingTaskId !== null) {
-    // UPDATE
-    const updated = { id: editingTaskId, name, tag, status, startDate: start, endDate: end, memo };
-    try {
-      await apiPost('updateTask', updated);
-      Object.assign(taskStore[editingTaskId], { name, tag, status, start, end, startFmt, endFmt, memo });
-      showToast('✅ 任務已更新');
-    } catch(e) { showToast('⚠ 更新失敗'); return; }
+    Object.assign(taskStore[editingTaskId], { name, tag, status, start, end, startFmt, endFmt, memo });
+    apiPost('updateTask', { id: editingTaskId, name, tag, status, startDate: start, endDate: end, memo }).catch(console.error);
+    showToast('✅ 任務已更新');
   } else {
-    // CREATE
-    try {
-      const res = await apiPost('addTask', { name, tag, status, startDate: start, endDate: end, memo });
-      const id = res.id || taskIdCounter++;
-      taskStore[id] = { id, name, tag, status, start, end, startFmt, endFmt, memo };
-      showToast('✅ 任務已新增');
-    } catch(e) { showToast('⚠ 新增失敗'); return; }
+    const id = taskIdCounter++;
+    taskStore[id] = { id, name, tag, status, start, end, startFmt, endFmt, memo };
+    apiPost('addTask', { name, tag, status, startDate: start, endDate: end, memo })
+      .then(res => { if (res.id && res.id !== id) { taskStore[res.id] = taskStore[id]; taskStore[res.id].id = res.id; delete taskStore[id]; } })
+      .catch(console.error);
+    showToast('✅ 任務已新增');
   }
-  renderAllTaskCards(); renderGantt(); updateStats(); closeModal('taskModal');
+  saveCache(); renderAllTaskCards(); renderGantt(); updateStats(); closeModal('taskModal');
 }
 
-async function removeTask(id) {
+function removeTask(id) {
   if (!confirm('確定要刪除此任務？')) return;
-  try {
-    await apiPost('deleteTask', { id });
-    delete taskStore[id];
-    renderAllTaskCards(); renderGantt(); updateStats();
-    showToast('🗑 任務已刪除');
-  } catch(e) { showToast('⚠ 刪除失敗'); }
+  delete taskStore[id];
+  apiPost('deleteTask', { id }).catch(console.error);
+  saveCache(); renderAllTaskCards(); renderGantt(); updateStats();
+  showToast('🗑 任務已刪除');
 }
 
-async function toggleTask(el, id) {
+function toggleTask(el, id) {
   el.classList.toggle('done');
   const isDone = el.classList.contains('done');
   const item = el.closest('.task-item');
@@ -1580,16 +1587,12 @@ async function toggleTask(el, id) {
   title.style.opacity = isDone ? '0.4' : '1';
   const newStatus = isDone ? 'done' : 'doing';
   if (taskStore[id]) taskStore[id].status = newStatus;
-  updateStats();
-  // 非同步更新 Sheets（不阻塞 UI）
-  apiPost('updateTask', { ...taskStore[id], startDate: taskStore[id]?.start || '', endDate: taskStore[id]?.end || '' })
-    .catch(() => showToast('⚠ 狀態同步失敗'));
+  apiPost('updateTask', { ...taskStore[id], startDate: taskStore[id]?.start || '', endDate: taskStore[id]?.end || '' }).catch(console.error);
+  saveCache(); updateStats();
 }
 
-// ============================================================
-// API-CONNECTED TODO OPERATIONS
-// ============================================================
-async function submitTodo() {
+// ── Todo ──────────────────────────────────────────────────
+function submitTodo() {
   const text = document.getElementById('m-todo-text').value.trim();
   if (!text) { showToast('⚠ 請輸入待辦內容'); return; }
   const tag = pillState.todo || tags[0].id;
@@ -1597,43 +1600,36 @@ async function submitTodo() {
   if (editingTodoId !== null) {
     const item = todoStore.find(t => t.id === editingTodoId);
     if (!item) return;
-    try {
-      await apiPost('updateTodo', { id: item.id, text, tag, done: item.done });
-      item.text = text; item.tag = tag;
-      showToast('✅ 待辦已更新');
-    } catch(e) { showToast('⚠ 更新失敗'); return; }
+    item.text = text; item.tag = tag;
+    apiPost('updateTodo', { id: item.id, text, tag, done: item.done }).catch(console.error);
+    showToast('✅ 待辦已更新');
   } else {
-    try {
-      const res = await apiPost('addTodo', { text, tag });
-      const id = res.id || todoIdCounter++;
-      todoStore.push({ id, text, tag, done: false });
-      showToast('✅ 待辦已新增');
-    } catch(e) { showToast('⚠ 新增失敗'); return; }
+    const id = todoIdCounter++;
+    todoStore.push({ id, text, tag, done: false });
+    apiPost('addTodo', { text, tag })
+      .then(res => { if (res.id && res.id !== id) { const t = todoStore.find(t=>t.id===id); if(t) t.id = res.id; } })
+      .catch(console.error);
+    showToast('✅ 待辦已新增');
   }
-  renderTodos(); closeModal('todoModal');
+  saveCache(); renderTodos(); closeModal('todoModal');
 }
 
-async function toggleTodo(id, done) {
+function toggleTodo(id, done) {
   const item = todoStore.find(t => t.id === id);
   if (!item) return;
   item.done = done;
-  renderTodos();
-  apiPost('updateTodo', { id: item.id, text: item.text, tag: item.tag, done })
-    .catch(() => showToast('⚠ 狀態同步失敗'));
+  apiPost('updateTodo', { id: item.id, text: item.text, tag: item.tag, done }).catch(console.error);
+  saveCache(); renderTodos();
 }
 
-async function removeTodo(id) {
-  try {
-    await apiPost('deleteTodo', { id });
-    todoStore = todoStore.filter(t => t.id !== id);
-    renderTodos(); showToast('🗑 待辦已刪除');
-  } catch(e) { showToast('⚠ 刪除失敗'); }
+function removeTodo(id) {
+  todoStore = todoStore.filter(t => t.id !== id);
+  apiPost('deleteTodo', { id }).catch(console.error);
+  saveCache(); renderTodos(); showToast('🗑 待辦已刪除');
 }
 
-// ============================================================
-// API-CONNECTED NOTE OPERATIONS
-// ============================================================
-async function submitNote() {
+// ── Note ──────────────────────────────────────────────────
+function submitNote() {
   const text = document.getElementById('m-note-text').value.trim();
   if (!text) { showToast('⚠ 請輸入備註內容'); return; }
   const tag  = pillState.note || tags[0].id;
@@ -1642,34 +1638,28 @@ async function submitNote() {
   if (editingNoteId !== null) {
     const n = noteStore.find(n => n.id === editingNoteId);
     if (!n) return;
-    try {
-      await apiPost('updateNote', { id: n.id, content: text, tag, date });
-      n.text = text; n.tag = tag; n.date = date;
-      showToast('📝 備註已更新');
-    } catch(e) { showToast('⚠ 更新失敗'); return; }
+    n.text = text; n.tag = tag; n.date = date;
+    apiPost('updateNote', { id: n.id, content: text, tag, date }).catch(console.error);
+    showToast('📝 備註已更新');
   } else {
-    try {
-      const res = await apiPost('addNote', { content: text, tag, date });
-      const id = res.id || noteIdCounter++;
-      noteStore.push({ id, text, tag, date });
-      showToast('📝 備註已新增');
-    } catch(e) { showToast('⚠ 新增失敗'); return; }
+    const id = noteIdCounter++;
+    noteStore.push({ id, text, tag, date });
+    apiPost('addNote', { content: text, tag, date })
+      .then(res => { if (res.id && res.id !== id) { const n = noteStore.find(n=>n.id===id); if(n) n.id = res.id; } })
+      .catch(console.error);
+    showToast('📝 備註已新增');
   }
-  renderNotes(); closeModal('noteModal');
+  saveCache(); renderNotes(); closeModal('noteModal');
 }
 
-async function removeNote(id) {
-  try {
-    await apiPost('deleteNote', { id });
-    noteStore = noteStore.filter(n => n.id !== id);
-    renderNotes(); showToast('🗑 備註已刪除');
-  } catch(e) { showToast('⚠ 刪除失敗'); }
+function removeNote(id) {
+  noteStore = noteStore.filter(n => n.id !== id);
+  apiPost('deleteNote', { id }).catch(console.error);
+  saveCache(); renderNotes(); showToast('🗑 備註已刪除');
 }
 
-// ============================================================
-// API-CONNECTED CALENDAR OPERATIONS
-// ============================================================
-async function addFromCalendar() {
+// ── Calendar ──────────────────────────────────────────────
+function addFromCalendar() {
   const name = document.getElementById('cal-item-name').value.trim();
   if (!name || !selectedCalDate) return;
   const tag    = pillState.cal || tags[0].id;
@@ -1679,45 +1669,44 @@ async function addFromCalendar() {
   const dateStr = `${y}-${pad(m)}-${pad(d)}`;
   const key = `${y}-${m}-${d}`;
 
-  try {
-    const res = await apiPost('addCalEvent', { name, tag, date: dateStr });
-    if (!calEvents[key]) calEvents[key] = [];
-    calEvents[key].push({ id: res.id, name, tag });
+  const calId = Date.now(); // 暫時 id，sync 後會被正確 id 覆蓋
+  if (!calEvents[key]) calEvents[key] = [];
+  calEvents[key].push({ id: calId, name, tag });
+  apiPost('addCalEvent', { name, tag, date: dateStr }).catch(console.error);
 
-    if (currentPage === 'overview') renderCalendar();
-    if (currentPage === 'calendar') renderCalendarPage();
+  if (tag !== 'event') {
+    const id = taskIdCounter++;
+    taskStore[id] = { id, name, tag, status, start: dateStr, end: '', startFmt: `${pad(m)}/${pad(d)}`, endFmt: '', memo: '' };
+    apiPost('addTask', { name, tag, status, startDate: dateStr, endDate: '', memo: '' }).catch(console.error);
+    renderAllTaskCards(); renderGantt(); updateStats();
+    showToast('✅ 任務新增並標記於日曆');
+  } else {
+    showToast('📅 公司活動已標記於日曆');
+  }
 
-    if (tag !== 'event') {
-      const taskRes = await apiPost('addTask', { name, tag, status, startDate: dateStr, endDate: '', memo: '' });
-      const id = taskRes.id || taskIdCounter++;
-      taskStore[id] = { id, name, tag, status, start: dateStr, end: '', startFmt: `${pad(m)}/${pad(d)}`, endFmt: '', memo: '' };
-      renderAllTaskCards(); renderGantt(); updateStats();
-      showToast('✅ 任務新增並標記於日曆');
-    } else {
-      showToast('📅 公司活動已標記於日曆');
-    }
-  } catch(e) { showToast('⚠ 新增失敗'); return; }
-
+  saveCache();
+  if (currentPage === 'overview') renderCalendar();
+  if (currentPage === 'calendar') renderCalendarPage();
   closeModal('calModal');
   if (currentPage === 'overview') calOverviewDayClick(d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
   else calPageDayClick(d);
 }
 
-async function removeCalEvent(key, idx) {
+function removeCalEvent(key, idx) {
   const ev = calEvents[key]?.[idx];
   if (!ev) return;
-  try {
-    if (ev.id) await apiPost('deleteCalEvent', { id: ev.id });
-    calEvents[key].splice(idx, 1);
-    if (!calEvents[key].length) delete calEvents[key];
-    if (currentPage === 'overview') renderCalendar();
-    if (currentPage === 'calendar') renderCalendarPage();
-    if (selectedCalDate) {
-      if (currentPage === 'overview') calOverviewDayClick(selectedCalDate.d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
-      else calPageDayClick(selectedCalDate.d);
-    }
-    showToast('🗑 日曆事件已移除');
-  } catch(e) { showToast('⚠ 刪除失敗'); }
+  if (ev.id) apiPost('deleteCalEvent', { id: ev.id }).catch(console.error);
+  calEvents[key].splice(idx, 1);
+  if (!calEvents[key].length) delete calEvents[key];
+  saveCache();
+  if (currentPage === 'overview') renderCalendar();
+  if (currentPage === 'calendar') renderCalendarPage();
+  if (selectedCalDate) {
+    if (currentPage === 'overview') calOverviewDayClick(selectedCalDate.d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
+    else calPageDayClick(selectedCalDate.d);
+  }
+  showToast('🗑 日曆事件已移除');
+} catch(e) { showToast('⚠ 刪除失敗'); }
 }
 
 // ============================================================
