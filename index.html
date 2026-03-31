@@ -1099,43 +1099,7 @@ function openTaskModal(id) {
   openModal('taskModal');
 }
 
-function submitTask() {
-  const name = document.getElementById('m-task-name').value.trim();
-  if (!name) { showToast('⚠ 請輸入任務名稱'); return; }
-  const tag    = pillState.task || tags[0].id;
-  const status = document.getElementById('m-task-status').value;
-  const start  = document.getElementById('m-task-start').value;
-  const end    = document.getElementById('m-task-end').value;
-  const memo   = document.getElementById('m-task-memo').value.trim();
-  const startFmt = start ? start.slice(5).replace('-','/') : '';
-  const endFmt   = end   ? end.slice(5).replace('-','/')   : '';
-  if (editingTaskId !== null) {
-    Object.assign(taskStore[editingTaskId], { name, tag, status, start, end, startFmt, endFmt, memo });
-    showToast('✅ 任務已更新');
-  } else {
-    addTaskToStore({ name, tag, status, start, end, memo });
-    showToast('✅ 任務已新增');
-  }
-  renderAllTaskCards(); renderGantt(); updateStats(); closeModal('taskModal');
-}
-
-function toggleTask(el, id) {
-  el.classList.toggle('done');
-  const isDone = el.classList.contains('done');
-  const item = el.closest('.task-item');
-  const title = item.querySelector('.task-title');
-  title.classList.toggle('line-through', isDone);
-  title.style.opacity = isDone ? '0.4' : '1';
-  if (taskStore[id]) taskStore[id].status = isDone ? 'done' : 'doing';
-  updateStats();
-}
-
-function removeTask(id) {
-  if (!confirm('確定要刪除此任務？')) return;
-  delete taskStore[id];
-  renderAllTaskCards(); renderGantt(); updateStats();
-  showToast('🗑 任務已刪除');
-}
+// submitTask / toggleTask / removeTask → defined later as async API versions
 
 // ============================================================
 // STATS
@@ -1252,31 +1216,7 @@ function openTodoModal(id) {
   openModal('todoModal');
 }
 
-function submitTodo() {
-  const text = document.getElementById('m-todo-text').value.trim();
-  if (!text) { showToast('⚠ 請輸入待辦內容'); return; }
-  const tag = pillState.todo || tags[0].id;
-  if (editingTodoId !== null) {
-    const item = todoStore.find(t=>t.id===editingTodoId);
-    if (item) { item.text = text; item.tag = tag; }
-    showToast('✅ 待辦已更新');
-  } else {
-    todoStore.push({ id: todoIdCounter++, text, tag, done: false });
-    showToast('✅ 待辦已新增');
-  }
-  renderTodos(); closeModal('todoModal');
-}
-
-function toggleTodo(id, done) {
-  const item = todoStore.find(t=>t.id===id);
-  if (item) item.done = done;
-  renderTodos();
-}
-
-function removeTodo(id) {
-  todoStore = todoStore.filter(t=>t.id!==id);
-  renderTodos(); showToast('🗑 待辦已刪除');
-}
+// submitTodo / toggleTodo / removeTodo → defined later as async API versions
 
 // ============================================================
 // NOTE STORE + RENDER
@@ -1327,26 +1267,7 @@ function openNoteModal(id) {
   openModal('noteModal');
 }
 
-function submitNote() {
-  const text = document.getElementById('m-note-text').value.trim();
-  if (!text) { showToast('⚠ 請輸入備註內容'); return; }
-  const tag  = pillState.note || tags[0].id;
-  const date = document.getElementById('m-note-date').value || '';
-  if (editingNoteId !== null) {
-    const n = noteStore.find(n=>n.id===editingNoteId);
-    if (n) { n.text = text; n.tag = tag; n.date = date; }
-    showToast('📝 備註已更新');
-  } else {
-    noteStore.push({ id: noteIdCounter++, text, tag, date });
-    showToast('📝 備註已新增');
-  }
-  renderNotes(); closeModal('noteModal');
-}
-
-function removeNote(id) {
-  noteStore = noteStore.filter(n=>n.id!==id);
-  renderNotes(); showToast('🗑 備註已刪除');
-}
+// submitNote / removeNote → defined later as async API versions
 
 // ============================================================
 // CALENDAR
@@ -1413,36 +1334,11 @@ function changeMonth(dir) {
 }
 
 function calDayClick(d) {
-  selectedCalDate={y:calYear,m:calMonth+1,d};
-  const key=`${calYear}-${calMonth+1}-${d}`, evts=calEvents[key]||[];
-  const list=document.getElementById('cal-event-list');
-  document.getElementById('cal-event-title').textContent=`${calYear}/${calMonth+1}/${d}`;
-  list.innerHTML='';
-  if (!evts.length) {
-    const msg=document.createElement('div'); msg.style.cssText='font-size:11px;color:var(--muted);margin-bottom:6px'; msg.textContent='此日期無事件'; list.appendChild(msg);
-  } else {
-    evts.forEach((ev,idx) => {
-      const tg=getTag(ev.tag), chip=document.createElement('div'); chip.className='event-chip';
-      chip.innerHTML=`<span class="event-dot" style="background:${tg.color}"></span><span style="flex:1;font-size:11.5px">${ev.name}</span><span class="tag tag-${ev.tag}">${tg.name}</span><button onclick="removeCalEvent('${key}',${idx})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;opacity:0.5;margin-left:4px">✕</button>`;
-      list.appendChild(chip);
-    });
-  }
-  const addBtn=document.createElement('button'); addBtn.className='btn-primary mt-2';
-  addBtn.style.cssText='font-size:11.5px;padding:5px 12px;width:100%'; addBtn.textContent='＋ 新增到此日期'; addBtn.onclick=openCalModal; list.appendChild(addBtn);
-  document.getElementById('cal-event-panel-overview').style.display='block';
+  // alias → calOverviewDayClick
+  calOverviewDayClick(d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
 }
 
-function removeCalEvent(key,idx) {
-  if (!calEvents[key]) return;
-  calEvents[key].splice(idx,1); if (!calEvents[key].length) delete calEvents[key];
-  if (currentPage==='overview') renderCalendar();
-  if (currentPage==='calendar') renderCalendarPage();
-  if (selectedCalDate) {
-    if (currentPage==='overview') calOverviewDayClick(selectedCalDate.d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
-    else calPageDayClick(selectedCalDate.d);
-  }
-  showToast('🗑 日曆事件已移除');
-}
+// removeCalEvent → defined later as async API version
 
 function openCalModal() {
   if (!selectedCalDate) return;
@@ -1454,24 +1350,7 @@ function openCalModal() {
   openModal('calModal');
 }
 
-function addFromCalendar() {
-  const name=document.getElementById('cal-item-name').value.trim();
-  if (!name||!selectedCalDate) return;
-  const tag=pillState.cal||tags[0].id, status=document.getElementById('cal-item-status').value;
-  const {y,m,d}=selectedCalDate, key=`${y}-${m}-${d}`;
-  if (!calEvents[key]) calEvents[key]=[];
-  calEvents[key].push({name,tag});
-  if (currentPage==='overview') renderCalendar();
-  if (currentPage==='calendar') renderCalendarPage();
-  if (tag!=='event') {
-    const pad=n=>String(n).padStart(2,'0'), dateStr=`${y}-${pad(m)}-${pad(d)}`;
-    addTaskToStore({name,tag,status,start:dateStr,end:'',memo:''});
-    renderAllTaskCards(); renderGantt(); updateStats(); showToast('✅ 任務新增並標記於日曆');
-  } else { showToast('📅 公司活動已標記於日曆'); }
-  closeModal('calModal');
-  if (currentPage==='overview') calOverviewDayClick(d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
-  else calPageDayClick(d);
-}
+// addFromCalendar / removeCalEvent → defined later as async API versions
 
 // ============================================================
 // MODAL / TOAST
@@ -1489,43 +1368,321 @@ function showToast(msg) {
 }
 
 // ============================================================
-// SEED DATA
+// API — Apps Script 串接
 // ============================================================
-function seedData() {
-  const now=new Date(), y=now.getFullYear(), m=now.getMonth()+1, pad=n=>String(n).padStart(2,'0');
-  addTaskToStore({name:'MBM娛樂城 — SEO 文案撰寫', tag:'casino', status:'doing',    start:`${y}-${pad(m)}-03`, end:`${y}-${pad(m)}-15`, memo:'需撰寫首頁、遊戲頁、活動頁共 10 篇 meta description，參考競品 DR 分析報告。'});
-  addTaskToStore({name:'牙科網站 — 醫師簡介頁',     tag:'dental', status:'handling', start:`${y}-${pad(m)}-07`, end:`${y}-${pad(m)}-20`, memo:'劉恩碩醫師簡介需強調 Invisalign 白金醫師資格，文字稿待主任確認。'});
-  addTaskToStore({name:'ofa2026 — 反向連結 Disavow', tag:'seo',    status:'pending',  start:`${y}-${pad(m)}-12`, end:`${y}-${pad(m)}-28`, memo:'已確認為演算法懲罰，需整理可疑連結清單提交至 Search Console。'});
-  calEvents[`${y}-${m}-15`]=[{name:'MBM SEO文案截止',tag:'casino'}];
-  calEvents[`${y}-${m}-20`]=[{name:'牙科醫師簡介審核',tag:'dental'}];
-  calEvents[`${y}-${m}-28`]=[{name:'Disavow 完成期限',tag:'seo'}];
+const API_URL = 'https://script.google.com/macros/s/AKfycbyJ5vNb9Ovq3LEVmEMzWddOT25rKKTq4UN2VU9C2dDTVsGQBGvWZc7IT7tBuyd-Cww/exec';
 
-  todoStore.push({id:todoIdCounter++,text:'更新 MBM meta description ×10 頁',tag:'casino',done:false});
-  todoStore.push({id:todoIdCounter++,text:'修復 Astra Customizer REST API 問題',tag:'wp',done:false});
-  todoStore.push({id:todoIdCounter++,text:'提交競品反向連結分析報告',tag:'seo',done:true});
-  todoStore.push({id:todoIdCounter++,text:'劉恩碩醫師 YouTube 頻道簡介定稿',tag:'dental',done:false});
-  todoStore.push({id:todoIdCounter++,text:'Q2 團隊聚餐場地確認',tag:'event',done:false});
+async function apiGet(action) {
+  const res = await fetch(`${API_URL}?action=${action}`);
+  return res.json();
+}
 
-  noteStore.push({id:noteIdCounter++,text:'ofa2026 關鍵字掉排名為演算法懲罰，姊妹站交叉連結構成 PBN，已部分設 nofollow，待完整清除。',tag:'casino',date:`${y}-${pad(m)}-10`});
-  noteStore.push({id:noteIdCounter++,text:'劉恩碩醫師 — Invisalign 白金醫師資格須在簡介中清楚標示。',tag:'dental',date:`${y}-${pad(m)}-08`});
-  noteStore.push({id:noteIdCounter++,text:'4月員工聚餐預計台中市區，各組回報人數，截止 3/20。',tag:'event',date:`${y}-${pad(m)}-05`});
+async function apiPost(action, payload) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action, payload }),
+  });
+  return res.json();
+}
+
+// ============================================================
+// LOADING OVERLAY
+// ============================================================
+function showLoading(msg = '載入資料中…') {
+  let el = document.getElementById('loading-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loading-overlay';
+    el.style.cssText = `
+      position:fixed;inset:0;background:var(--bg);z-index:999;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+      transition:opacity 0.3s;
+    `;
+    el.innerHTML = `
+      <div style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);
+                  border-radius:50%;animation:spin 0.7s linear infinite"></div>
+      <div id="loading-msg" style="font-size:13px;color:var(--muted)">${msg}</div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+    document.body.appendChild(el);
+  }
+  el.style.opacity = '1';
+  el.style.display = 'flex';
+  document.getElementById('loading-msg').textContent = msg;
+}
+
+function hideLoading() {
+  const el = document.getElementById('loading-overlay');
+  if (!el) return;
+  el.style.opacity = '0';
+  setTimeout(() => { el.style.display = 'none'; }, 300);
+}
+
+// ============================================================
+// INIT — 從 Sheets 載入
+// ============================================================
+async function init() {
+  applyTagStyles();
+  renderSidebarTags();
+  renderAllPills();
+  initCal();
+  initGanttPage();
+  showLoading('連線至資料庫…');
+
+  try {
+    const data = await apiGet('loadAll');
+
+    // ── Tasks ──────────────────────────────────
+    (data.tasks || []).forEach(t => {
+      const id = Number(t.id);
+      if (id >= taskIdCounter) taskIdCounter = id + 1;
+      const startFmt = t.startDate ? String(t.startDate).slice(5).replace('-','/') : '';
+      const endFmt   = t.endDate   ? String(t.endDate).slice(5).replace('-','/')   : '';
+      taskStore[id] = {
+        id, name: t.name, tag: t.tag, status: t.status,
+        start: t.startDate || '', end: t.endDate || '',
+        startFmt, endFmt, memo: t.memo || ''
+      };
+    });
+
+    // ── Todos ──────────────────────────────────
+    (data.todos || []).forEach(t => {
+      const id = Number(t.id);
+      if (id >= todoIdCounter) todoIdCounter = id + 1;
+      todoStore.push({
+        id, text: t.text, tag: t.tag,
+        done: t.done === true || t.done === 'TRUE' || t.done === true
+      });
+    });
+
+    // ── Notes ──────────────────────────────────
+    (data.notes || []).forEach(n => {
+      const id = Number(n.id);
+      if (id >= noteIdCounter) noteIdCounter = id + 1;
+      noteStore.push({ id, text: n.content, tag: n.tag, date: n.date || '' });
+    });
+
+    // ── CalEvents ──────────────────────────────
+    (data.calEvents || []).forEach(ev => {
+      if (!ev.date) return;
+      const d = new Date(ev.date);
+      if (isNaN(d)) return;
+      const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+      if (!calEvents[key]) calEvents[key] = [];
+      calEvents[key].push({ id: Number(ev.id), name: ev.name, tag: ev.tag });
+    });
+
+  } catch(err) {
+    showToast('⚠ 資料載入失敗，請確認網路連線');
+    console.error(err);
+  }
+
+  // 渲染所有區塊
+  renderAllTaskCards();
+  renderTodos();
+  renderNotes();
+  renderGantt();
+  renderCalendar();
+  updateStats();
+  hideLoading();
+}
+
+// ============================================================
+// API-CONNECTED TASK OPERATIONS
+// ============================================================
+async function submitTask() {
+  const name = document.getElementById('m-task-name').value.trim();
+  if (!name) { showToast('⚠ 請輸入任務名稱'); return; }
+  const tag      = pillState.task || tags[0].id;
+  const status   = document.getElementById('m-task-status').value;
+  const start    = document.getElementById('m-task-start').value;
+  const end      = document.getElementById('m-task-end').value;
+  const memo     = document.getElementById('m-task-memo').value.trim();
+  const startFmt = start ? start.slice(5).replace('-','/') : '';
+  const endFmt   = end   ? end.slice(5).replace('-','/')   : '';
+
+  if (editingTaskId !== null) {
+    // UPDATE
+    const updated = { id: editingTaskId, name, tag, status, startDate: start, endDate: end, memo };
+    try {
+      await apiPost('updateTask', updated);
+      Object.assign(taskStore[editingTaskId], { name, tag, status, start, end, startFmt, endFmt, memo });
+      showToast('✅ 任務已更新');
+    } catch(e) { showToast('⚠ 更新失敗'); return; }
+  } else {
+    // CREATE
+    try {
+      const res = await apiPost('addTask', { name, tag, status, startDate: start, endDate: end, memo });
+      const id = res.id || taskIdCounter++;
+      taskStore[id] = { id, name, tag, status, start, end, startFmt, endFmt, memo };
+      showToast('✅ 任務已新增');
+    } catch(e) { showToast('⚠ 新增失敗'); return; }
+  }
+  renderAllTaskCards(); renderGantt(); updateStats(); closeModal('taskModal');
+}
+
+async function removeTask(id) {
+  if (!confirm('確定要刪除此任務？')) return;
+  try {
+    await apiPost('deleteTask', { id });
+    delete taskStore[id];
+    renderAllTaskCards(); renderGantt(); updateStats();
+    showToast('🗑 任務已刪除');
+  } catch(e) { showToast('⚠ 刪除失敗'); }
+}
+
+async function toggleTask(el, id) {
+  el.classList.toggle('done');
+  const isDone = el.classList.contains('done');
+  const item = el.closest('.task-item');
+  const title = item.querySelector('.task-title');
+  title.classList.toggle('line-through', isDone);
+  title.style.opacity = isDone ? '0.4' : '1';
+  const newStatus = isDone ? 'done' : 'doing';
+  if (taskStore[id]) taskStore[id].status = newStatus;
+  updateStats();
+  // 非同步更新 Sheets（不阻塞 UI）
+  apiPost('updateTask', { ...taskStore[id], startDate: taskStore[id]?.start || '', endDate: taskStore[id]?.end || '' })
+    .catch(() => showToast('⚠ 狀態同步失敗'));
+}
+
+// ============================================================
+// API-CONNECTED TODO OPERATIONS
+// ============================================================
+async function submitTodo() {
+  const text = document.getElementById('m-todo-text').value.trim();
+  if (!text) { showToast('⚠ 請輸入待辦內容'); return; }
+  const tag = pillState.todo || tags[0].id;
+
+  if (editingTodoId !== null) {
+    const item = todoStore.find(t => t.id === editingTodoId);
+    if (!item) return;
+    try {
+      await apiPost('updateTodo', { id: item.id, text, tag, done: item.done });
+      item.text = text; item.tag = tag;
+      showToast('✅ 待辦已更新');
+    } catch(e) { showToast('⚠ 更新失敗'); return; }
+  } else {
+    try {
+      const res = await apiPost('addTodo', { text, tag });
+      const id = res.id || todoIdCounter++;
+      todoStore.push({ id, text, tag, done: false });
+      showToast('✅ 待辦已新增');
+    } catch(e) { showToast('⚠ 新增失敗'); return; }
+  }
+  renderTodos(); closeModal('todoModal');
+}
+
+async function toggleTodo(id, done) {
+  const item = todoStore.find(t => t.id === id);
+  if (!item) return;
+  item.done = done;
+  renderTodos();
+  apiPost('updateTodo', { id: item.id, text: item.text, tag: item.tag, done })
+    .catch(() => showToast('⚠ 狀態同步失敗'));
+}
+
+async function removeTodo(id) {
+  try {
+    await apiPost('deleteTodo', { id });
+    todoStore = todoStore.filter(t => t.id !== id);
+    renderTodos(); showToast('🗑 待辦已刪除');
+  } catch(e) { showToast('⚠ 刪除失敗'); }
+}
+
+// ============================================================
+// API-CONNECTED NOTE OPERATIONS
+// ============================================================
+async function submitNote() {
+  const text = document.getElementById('m-note-text').value.trim();
+  if (!text) { showToast('⚠ 請輸入備註內容'); return; }
+  const tag  = pillState.note || tags[0].id;
+  const date = document.getElementById('m-note-date').value || '';
+
+  if (editingNoteId !== null) {
+    const n = noteStore.find(n => n.id === editingNoteId);
+    if (!n) return;
+    try {
+      await apiPost('updateNote', { id: n.id, content: text, tag, date });
+      n.text = text; n.tag = tag; n.date = date;
+      showToast('📝 備註已更新');
+    } catch(e) { showToast('⚠ 更新失敗'); return; }
+  } else {
+    try {
+      const res = await apiPost('addNote', { content: text, tag, date });
+      const id = res.id || noteIdCounter++;
+      noteStore.push({ id, text, tag, date });
+      showToast('📝 備註已新增');
+    } catch(e) { showToast('⚠ 新增失敗'); return; }
+  }
+  renderNotes(); closeModal('noteModal');
+}
+
+async function removeNote(id) {
+  try {
+    await apiPost('deleteNote', { id });
+    noteStore = noteStore.filter(n => n.id !== id);
+    renderNotes(); showToast('🗑 備註已刪除');
+  } catch(e) { showToast('⚠ 刪除失敗'); }
+}
+
+// ============================================================
+// API-CONNECTED CALENDAR OPERATIONS
+// ============================================================
+async function addFromCalendar() {
+  const name = document.getElementById('cal-item-name').value.trim();
+  if (!name || !selectedCalDate) return;
+  const tag    = pillState.cal || tags[0].id;
+  const status = document.getElementById('cal-item-status').value;
+  const { y, m, d } = selectedCalDate;
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${y}-${pad(m)}-${pad(d)}`;
+  const key = `${y}-${m}-${d}`;
+
+  try {
+    const res = await apiPost('addCalEvent', { name, tag, date: dateStr });
+    if (!calEvents[key]) calEvents[key] = [];
+    calEvents[key].push({ id: res.id, name, tag });
+
+    if (currentPage === 'overview') renderCalendar();
+    if (currentPage === 'calendar') renderCalendarPage();
+
+    if (tag !== 'event') {
+      const taskRes = await apiPost('addTask', { name, tag, status, startDate: dateStr, endDate: '', memo: '' });
+      const id = taskRes.id || taskIdCounter++;
+      taskStore[id] = { id, name, tag, status, start: dateStr, end: '', startFmt: `${pad(m)}/${pad(d)}`, endFmt: '', memo: '' };
+      renderAllTaskCards(); renderGantt(); updateStats();
+      showToast('✅ 任務新增並標記於日曆');
+    } else {
+      showToast('📅 公司活動已標記於日曆');
+    }
+  } catch(e) { showToast('⚠ 新增失敗'); return; }
+
+  closeModal('calModal');
+  if (currentPage === 'overview') calOverviewDayClick(d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
+  else calPageDayClick(d);
+}
+
+async function removeCalEvent(key, idx) {
+  const ev = calEvents[key]?.[idx];
+  if (!ev) return;
+  try {
+    if (ev.id) await apiPost('deleteCalEvent', { id: ev.id });
+    calEvents[key].splice(idx, 1);
+    if (!calEvents[key].length) delete calEvents[key];
+    if (currentPage === 'overview') renderCalendar();
+    if (currentPage === 'calendar') renderCalendarPage();
+    if (selectedCalDate) {
+      if (currentPage === 'overview') calOverviewDayClick(selectedCalDate.d,'cal-event-panel-overview','cal-event-title-overview','cal-event-list-overview');
+      else calPageDayClick(selectedCalDate.d);
+    }
+    showToast('🗑 日曆事件已移除');
+  } catch(e) { showToast('⚠ 刪除失敗'); }
 }
 
 // ============================================================
 // INIT
 // ============================================================
-applyTagStyles();
-renderSidebarTags();
-renderAllPills();
-initCal();
-initGanttPage();
-seedData();
-renderAllTaskCards();
-renderTodos();
-renderNotes();
-renderGantt();
-renderCalendar();
-updateStats();
+init();
 </script>
 </body>
 </html>
