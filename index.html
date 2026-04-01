@@ -1317,8 +1317,13 @@ function _renderCalendarInto(gridId, headerId, eventPanelId, eventTitleId, event
   for (let d=1;d<=days;d++){
     const div=document.createElement('div');div.className='cal-day';div.textContent=d;
     const key=`${calYear}-${calMonth+1}-${d}`;
+    const cur=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     if(d===today.getDate()&&calMonth===today.getMonth()&&calYear===today.getFullYear()) div.classList.add('today');
-    if(calEvents[key]) div.classList.add(calEvents[key].some(e=>e.tag==='event')?'has-company-event':'has-event');
+    const hasCalEvent=!!calEvents[key];
+    const hasTask=Object.values(taskStore).some(t=>(t.start&&t.start.slice(0,10)===cur)||(t.end&&t.end.slice(0,10)===cur));
+    const hasNote=noteStore.some(n=>n.date&&n.date.slice(0,10)===cur);
+    const isCompany=hasCalEvent&&calEvents[key].some(e=>String(e.tag)==='event'||getTag(e.tag).name==='公司活動');
+    if(hasCalEvent||hasTask||hasNote) div.classList.add(isCompany?'has-company-event':'has-event');
     const cd=d; div.onclick=()=>dayClickFn(cd,eventPanelId,eventTitleId,eventListId); grid.appendChild(div);
   }
   const rem=(firstDay+days)%7===0?0:7-(firstDay+days)%7;
@@ -1397,7 +1402,7 @@ function showToast(msg) {
 // ============================================================
 // API — Apps Script 串接
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzu1d-8VMNbtbKdI8SXZU_HzGxRPlAoIHSdFpRwlMdhQDVmhiQmg7g3FAST7K3A20xp/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzDEo3-JN3Ub2Jb2ClY-ondx2I_EioHzr2TcnqbY7vYbSRDHZICJnPpKgTlzKMTyuOC/exec';
 
 const CACHE_KEY = 'workboard_cache';
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 分鐘
@@ -1509,9 +1514,13 @@ function loadFromData(data) {
   });
   (data.calEvents || []).forEach(ev => {
     if (!ev.date) return;
-    const d = new Date(ev.date);
-    if (isNaN(d)) return;
-    const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    // 統一取 YYYY-MM-DD 前10碼，避免時區問題
+    const dateStr = String(ev.date).slice(0, 10);
+    const parts = dateStr.split('-');
+    if (parts.length < 3) return;
+    const y = parseInt(parts[0]), m = parseInt(parts[1]), d = parseInt(parts[2]);
+    if (!y || !m || !d) return;
+    const key = `${y}-${m}-${d}`;
     if (!calEvents[key]) calEvents[key] = [];
     calEvents[key].push({ id: Number(ev.id), name: ev.name, tag: ev.tag });
   });
